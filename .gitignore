@@ -1,0 +1,13 @@
+# Sensitive files - do not commit
+config.json
+mailing_list.txt
+state.json
+
+# Log files
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python

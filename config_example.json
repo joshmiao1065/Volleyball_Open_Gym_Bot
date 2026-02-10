@@ -1,0 +1,15 @@
+{
+  "page_url": "https://www.nyurban.com/?page_id=400&filter_id=1&gametypeid=1",
+  "check_interval_minutes": 10,
+  "personal_email": "PERSONALEMAIL@EXAMPLE.COM",
+  "email": {
+    "from_address": "jSENDER EMAIL ADDRESS",
+    "app_password": "GOOGLE APP PASSWORD FOR A SENDER EMAIL ADDRESS"
+  },
+  "checkout": {
+    "first_name": "FIRSTNAME"
+    "last_name": "LASTNAME",
+    "email": "EMAIL@EXAMPLE.COM"
+  },
+  "mailing_list_message": "Hey guys! It's JoshBot. Great news! NY Urban Beacon slots just dropped. Check it out:"
+}

@@ -1,0 +1,19 @@
+[Unit]
+Description=NY Urban Volleyball Slot Monitor Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=josh
+WorkingDirectory=/home/josh/volleyball_bot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /home/josh/volleyball_bot/volleyball_bot.py
+Restart=always
+RestartSec=60
+StandardOutput=append:/home/josh/volleyball_bot/volleyball_bot.log
+StandardError=append:/home/josh/volleyball_bot/volleyball_bot.log
+
+[Install]
+WantedBy=multi-user.target
+
