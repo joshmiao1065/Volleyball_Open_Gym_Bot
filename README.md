@@ -2,6 +2,8 @@
 
 Automated bot that monitors NY Urban's Beacon/Fri volleyball open play slots and notifies you when Advanced Intermediate slots become available.
 
+You easily configure the configure.json for another link or website. 
+
 ## Features
 
 - Monitors Beacon/Fri tab every 10 minutes
@@ -13,7 +15,7 @@ Automated bot that monitors NY Urban's Beacon/Fri volleyball open play slots and
 - Smart duplicate prevention (won't spam about same dates)
 - Error notifications with 24-hour throttling
 - Auto-restart on failure via systemd
-- Lightweight and Pi-hole compatible
+- Lightweight and runs on my PiHole 
 
 ## File Structure
 
@@ -59,15 +61,12 @@ playwright install-deps chromium
 
 ### Step 2: Configure the Bot
 
-All configuration is already set in `config.json`, but you can customize:
+Probably easiest if you rename the files with "_example" in the name to remove the "example". Those would be
+config_example.json to config.json, mailing_list_example.txt to mailing_list.txt, and state_example.json to state.json
 
-1. **Mailing List Message**: Edit the `mailing_list_message` field in `config.json`
-2. **Check Interval**: Change `check_interval_minutes` (default: 10)
-3. **Add/Remove Emails**: Edit `mailing_list.txt` (one email per line)
+1. You may configure the 'config.json' to specify an alternate site url, personal email, sender email, app password and check interval(minutes).
+2. Modify 'mailing_list.txt' with one email per line
 
-### Step 3: Set Up Systemd Service
-
-```bash
 # Copy service file to systemd directory
 sudo cp volleyball_bot.service /etc/systemd/system/
 
@@ -113,6 +112,16 @@ sudo systemctl status volleyball_bot.service
 
 # View logs
 tail -f ~/volleyball_bot/volleyball_bot.log
+
+# View last 25 logs
+tail -f ~/volleyball_bot/volleyball_bot.log -n 25
+
+# View systemd service logs
+sudo journalctl -u volleyball_bot.service -f
+
+# View last 100 systemd logs
+sudo journalctl -u volleyball_bot.service -n 100
+
 ```
 
 ### Managing the Mailing List
@@ -176,40 +185,9 @@ sudo systemctl start volleyball_bot.service
    - Throttled to one error email per 24 hours
    - Auto-restarts after crashes (via systemd)
 
-## Email Notifications
+#TroubleShooting
 
-### Mailing List Email
-- **To**: Everyone in `mailing_list.txt`
-- **Subject**: "Volleyball Slots Available - [X] found!"
-- **Contains**: Date, gym, level, and link to registration page
-
-### Personal Email (Success)
-- **To**: joshuamiao03@gmail.com
-- **Subject**: "Volleyball Bot - Checkout Ready!"
-- **Contains**: Selected slots and direct checkout/payment link
-
-### Personal Email (Error)
-- **To**: joshuamiao03@gmail.com
-- **Subject**: "Volleyball Bot Error Alert"
-- **Contains**: Error details and timestamp
-- **Frequency**: Max once per 24 hours
-
-## Troubleshooting
-
-### Bot Not Starting
-
-```bash
-# Check service status
-sudo systemctl status volleyball_bot.service
-
-# View detailed logs
-sudo journalctl -u volleyball_bot.service -n 50
-
-# Check if Playwright is installed
-python3 -c "from playwright.sync_api import sync_playwright; print('OK')"
-```
-
-### No Emails Being Sent
+No Emails Being Sent
 
 1. Verify Gmail app password in `config.json`
 2. Check logs: `tail -f ~/volleyball_bot/volleyball_bot.log`
@@ -218,14 +196,7 @@ python3 -c "from playwright.sync_api import sync_playwright; print('OK')"
    python3 -c "from volleyball_bot import VolleyballBot; bot = VolleyballBot(); bot.send_email(['your@email.com'], 'Test', 'Testing')"
    ```
 
-### Bot Crashes Frequently
-
-- Check logs for specific errors
-- Ensure Raspberry Pi has stable internet
-- Verify Pi-hole isn't blocking nyurban.com
-- Increase system resources if needed
-
-### Playwright Issues
+Playwright Issues
 
 ```bash
 # Reinstall Playwright browsers
@@ -264,21 +235,6 @@ free -h
 top
 ```
 
-## Advanced Configuration
-
-### Change Check Interval
-
-Edit `config.json`:
-```json
-{
-  "check_interval_minutes": 5
-}
-```
-
-Then restart: `sudo systemctl restart volleyball_bot.service`
-
-### Run Multiple Instances
-
 To monitor multiple locations:
 1. Copy the entire directory
 2. Modify `config.json` to monitor different tab
@@ -299,14 +255,12 @@ tar -czf volleyball_bot_backup.tar.gz ~/volleyball_bot/*.json ~/volleyball_bot/*
   ```bash
   chmod 600 ~/volleyball_bot/config.json
   ```
-- Never commit `config.json` to version control
-- The app password is specific to this bot and can be revoked in Gmail settings
 
 ## Compatibility
 
-- **OS**: Raspberry Pi OS (Debian-based)
+- **OS**: Raspberry Pi OS (Debian-based) but will probably work in any environment tbh
 - **Python**: 3.7+
-- **Tested on**: Raspberry Pi 3/4 running Pi-hole
+- **Tested on**: Raspberry Pi 4 Model B
 - **Browser**: Chromium (headless)
 
 ## License
@@ -321,6 +275,9 @@ For issues or questions:
 3. Review this README
 4. Check that all files are in place
 
+If you still can't figure out, ask gemini or claude lol.
+After all that and you still can't figure it out, email me at josh.volleyball.bot@gmail.com
+
 ## Changelog
 
 ### v1.0.0 (Initial Release)
@@ -333,44 +290,6 @@ For issues or questions:
 - Pi-hole compatible
 
 
-# Volleyball Bot - Quick Reference
-
-## Common Commands
-
-### Service Management
-```bash
-# Start the bot
-sudo systemctl start volleyball_bot.service
-
-# Stop the bot
-sudo systemctl stop volleyball_bot.service
-
-# Restart the bot
-sudo systemctl restart volleyball_bot.service
-
-# Check if bot is running
-sudo systemctl status volleyball_bot.service
-
-# Enable auto-start on boot (already done during install)
-sudo systemctl enable volleyball_bot.service
-
-# Disable auto-start on boot
-sudo systemctl disable volleyball_bot.service
-```
-
-### Viewing Logs
-```bash
-# View live logs (Ctrl+C to exit)
-tail -f ~/volleyball_bot/volleyball_bot.log
-
-# View last 50 lines
-tail -n 50 ~/volleyball_bot/volleyball_bot.log
-
-# View systemd service logs
-sudo journalctl -u volleyball_bot.service -f
-
-# View last 100 systemd logs
-sudo journalctl -u volleyball_bot.service -n 100
 ```
 
 ### Editing Configuration
@@ -381,7 +300,6 @@ nano ~/volleyball_bot/mailing_list.txt
 
 # Edit configuration
 nano ~/volleyball_bot/config.json
-# Then restart: sudo systemctl restart volleyball_bot.service
 
 # View current state (what dates have been notified)
 cat ~/volleyball_bot/state.json
@@ -506,38 +424,3 @@ df -h
 - **Subject**: Volleyball Bot Error Alert
 - **Contains**: Error message, timestamp
 - **Throttle**: Max once per 24 hours
-
-## Quick Diagnostic Checklist
-
-If bot isn't working:
-- [ ] Service is running: `sudo systemctl status volleyball_bot.service`
-- [ ] Logs show activity: `tail volleyball_bot.log`
-- [ ] Config file is correct: `cat config.json`
-- [ ] Mailing list has emails: `cat mailing_list.txt`
-- [ ] Network is working: `ping google.com`
-- [ ] Playwright is installed: `playwright --version`
-- [ ] Python packages installed: `pip3 list | grep playwright`
-
-If emails aren't sending:
-- [ ] Gmail app password is correct in config.json
-- [ ] Bot email is josh.volleyball.bot@gmail.com
-- [ ] Test email manually: See testing section above
-- [ ] Check spam folder
-- [ ] Verify email addresses in mailing_list.txt
-
-## Performance Notes
-
-- **CPU Usage**: Low (only active during checks)
-- **Memory**: ~200-300MB during checks, ~50MB idle
-- **Network**: Minimal (only HTTPS to nyurban.com and Gmail)
-- **Disk**: Logs rotate automatically, minimal space
-- **Pi-hole**: Compatible, won't interfere
-
-## Safety Features
-
-- Auto-restart on crash (systemd)
-- Error notifications with throttling
-- Duplicate prevention (won't spam same dates)
-- Graceful error handling
-- Comprehensive logging
-- State persistence across restarts
