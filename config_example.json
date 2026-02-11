@@ -7,7 +7,7 @@
     "app_password": "GOOGLE APP PASSWORD FOR A SENDER EMAIL ADDRESS"
   },
   "checkout": {
-    "first_name": "FIRSTNAME"
+    "first_name": "FIRSTNAME",
     "last_name": "LASTNAME",
     "email": "EMAIL@EXAMPLE.COM"
   },
