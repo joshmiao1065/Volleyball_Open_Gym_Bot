@@ -41,6 +41,7 @@ class VolleyballBot:
     def __init__(self):
         """Initialize the bot with configuration"""
         self.config = self.load_config()
+        self.validate_config()
         self.state = self.load_state()
         self.mailing_list = self.load_mailing_list()
         
@@ -55,16 +56,43 @@ class VolleyballBot:
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in config file: {e}")
             raise
+
+    def validate_config(self):
+        """Fail fast if config still contains placeholder values (all-caps strings)"""
+        checks = {
+            'personal_email': self.config.get('personal_email', ''),
+            'email.from_address': self.config['email'].get('from_address', ''),
+            'email.app_password': self.config['email'].get('app_password', ''),
+            'checkout.email': self.config['checkout'].get('email', ''),
+            'checkout.first_name': self.config['checkout'].get('first_name', ''),
+            'checkout.last_name': self.config['checkout'].get('last_name', ''),
+        }
+        errors = [
+            f"  - {field}: '{value}'"
+            for field, value in checks.items()
+            if not value or value == value.upper()  # unfilled placeholders are ALL_CAPS
+        ]
+        if errors:
+            raise ValueError("config.json has unfilled placeholder values:\n" + "\n".join(errors))
     
     def load_state(self) -> dict:
         """Load state from state.json or create new state"""
         try:
             with open(STATE_FILE, 'r') as f:
-                return json.load(f)
+                state = json.load(f)
+            # Migrate old notified_dates list to date_states dict
+            if 'notified_dates' in state and 'date_states' not in state:
+                logger.info("Migrating state from notified_dates to date_states format")
+                state['date_states'] = {
+                    date: {"status": "available", "notified": True, "last_notified": None, "times_notified": 1}
+                    for date in state.pop('notified_dates')
+                }
+                with open(STATE_FILE, 'w') as f:
+                    json.dump(state, f, indent=2)
+            return state
         except FileNotFoundError:
-            # Initialize new state
             return {
-                "notified_dates": [],
+                "date_states": {},
                 "last_error_notification": None,
                 "last_successful_check": None
             }
@@ -241,21 +269,18 @@ Please check the page manually: {self.config['page_url']}
                 page.wait_for_load_state('networkidle')
                 page.wait_for_timeout(2000)  # Additional wait for table to populate
                 
-                # Parse the table for available slots
-                available_slots = []
-                
-                # Find all table rows
+                # Parse ALL Advanced Intermediate rows regardless of availability
+                all_slots = []
+
                 rows = page.query_selector_all('table tbody tr')
                 logger.info(f"Found {len(rows)} rows in table")
-                
+
                 for row in rows:
                     try:
-                        # Get all cells in the row
                         cells = row.query_selector_all('td')
                         if len(cells) < 7:
                             continue
-                        
-                        # Extract data from cells
+
                         # Structure: Select | Date | Gym | Level | Time | Fee | Available
                         date = cells[1].inner_text().strip()
                         gym = cells[2].inner_text().strip()
@@ -263,33 +288,33 @@ Please check the page manually: {self.config['page_url']}
                         time = cells[4].inner_text().strip()
                         fee = cells[5].inner_text().strip()
                         availability = cells[6].inner_text().strip()
-                        
-                        # Check if it matches our criteria
-                        is_advanced_intermediate = "Advanced Intermediate" in level
-                        is_available = availability.lower() == "yes" or ("space" in availability.lower() and availability.lower() != "sold out")
-                        
-                        if is_advanced_intermediate and is_available:
-                            # Check if we've already notified about this date
-                            if date not in self.state['notified_dates']:
-                                slot_data = {
-                                    'date': date,
-                                    'gym': gym,
-                                    'level': level,
-                                    'time': time,
-                                    'fee': fee,
-                                    'availability': availability
-                                }
-                                available_slots.append(slot_data)
-                                logger.info(f"Found available slot: {date} - {gym} - {level}")
-                    
+
+                        if "Advanced Intermediate" not in level:
+                            continue
+
+                        avail_lower = availability.lower()
+                        is_sold_out = "sold out" in avail_lower
+                        is_available = not is_sold_out and (avail_lower == "yes" or "space" in avail_lower)
+
+                        all_slots.append({
+                            'date': date,
+                            'gym': gym,
+                            'level': level,
+                            'time': time,
+                            'fee': fee,
+                            'availability': availability,
+                            'status': 'sold_out' if is_sold_out else ('available' if is_available else 'unknown')
+                        })
+                        logger.info(f"Scraped slot: {date} - {gym} - status: {'sold_out' if is_sold_out else 'available'}")
+
                     except Exception as e:
                         logger.warning(f"Error parsing row: {e}")
                         continue
-                
+
                 browser.close()
-                
-                logger.info(f"Found {len(available_slots)} new available slots")
-                return available_slots
+
+                logger.info(f"Scraped {len(all_slots)} Advanced Intermediate slots total")
+                return all_slots
                 
         except Exception as e:
             logger.error(f"Error during slot check: {e}")
@@ -393,37 +418,63 @@ Please check the page manually: {self.config['page_url']}
     def run_check_cycle(self):
         """Run a single check cycle"""
         try:
-            # Check for available slots
-            available_slots = self.check_slots()
-            
-            if available_slots:
-                logger.info(f"Found {len(available_slots)} available slots!")
-                
-                # Send notification to mailing list
-                self.send_mailing_list_notification(available_slots)
-                
-                # Attempt to select slots and checkout
-                checkout_url = self.select_slots_and_checkout(available_slots)
-                
-                # Send personal notification
-                self.send_personal_notification(
-                    checkout_url,
-                    checkout_url is not None,
-                    available_slots
-                )
-                
-                # Mark these dates as notified
-                for slot in available_slots:
-                    if slot['date'] not in self.state['notified_dates']:
-                        self.state['notified_dates'].append(slot['date'])
-                
-                self.state['last_successful_check'] = datetime.now().isoformat()
-                self.save_state()
+            all_slots = self.check_slots()
+
+            slots_to_notify = []
+            now = datetime.now().isoformat()
+
+            for slot in all_slots:
+                date = slot['date']
+                existing = self.state['date_states'].get(date)
+
+                if slot['status'] == 'available':
+                    if existing is None:
+                        # First time seeing this date — notify
+                        slots_to_notify.append(slot)
+                        self.state['date_states'][date] = {
+                            "status": "available",
+                            "notified": True,
+                            "last_notified": now,
+                            "times_notified": 1
+                        }
+                    elif existing['status'] == 'sold_out':
+                        # Was sold out, now has a cancellation — re-notify
+                        logger.info(f"Slot re-opened after selling out: {date}")
+                        slots_to_notify.append(slot)
+                        existing['status'] = 'available'
+                        existing['notified'] = True
+                        existing['last_notified'] = now
+                        existing['times_notified'] = existing.get('times_notified', 1) + 1
+                    # else: still open from before, no spam
+
+                elif slot['status'] == 'sold_out':
+                    if existing is None:
+                        # First time seeing this date but it's already sold out — just record it
+                        self.state['date_states'][date] = {
+                            "status": "sold_out",
+                            "notified": False,
+                            "last_notified": None,
+                            "times_notified": 0
+                        }
+                    elif existing['status'] == 'available':
+                        # Was open, now sold out — update status silently
+                        logger.info(f"Slot sold out: {date}")
+                        existing['status'] = 'sold_out'
+
+            if slots_to_notify:
+                logger.info(f"Notifying about {len(slots_to_notify)} slot(s)")
+                self.send_mailing_list_notification(slots_to_notify)
+
+                available_for_checkout = [s for s in slots_to_notify if s['status'] == 'available']
+                if available_for_checkout:
+                    checkout_url = self.select_slots_and_checkout(available_for_checkout)
+                    self.send_personal_notification(checkout_url, checkout_url is not None, available_for_checkout)
             else:
-                logger.info("No new available slots found")
-                self.state['last_successful_check'] = datetime.now().isoformat()
-                self.save_state()
-                
+                logger.info("No new or re-opened slots found")
+
+            self.state['last_successful_check'] = now
+            self.save_state()
+
         except Exception as e:
             logger.error(f"Error in check cycle: {e}")
             self.send_error_notification(str(e))

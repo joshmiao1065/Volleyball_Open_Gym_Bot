@@ -29,9 +29,11 @@ def main():
         print()
         
         print(f"State loaded")
-        print(f"   Notified dates: {len(bot.state['notified_dates'])}")
-        if bot.state['notified_dates']:
-            print(f"   Already notified: {', '.join(bot.state['notified_dates'])}")
+        date_states = bot.state.get('date_states', {})
+        print(f"   Tracked dates: {len(date_states)}")
+        if date_states:
+            for date, info in date_states.items():
+                print(f"   - {date}: {info['status']} (notified {info.get('times_notified', 0)}x)")
         print()
         
         print("Running single check cycle...")

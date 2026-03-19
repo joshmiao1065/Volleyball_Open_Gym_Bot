@@ -43,8 +43,21 @@ echo "Step 4: Installing Playwright system dependencies..."
 sudo playwright install-deps chromium
 
 echo ""
-echo "Step 5: Setting secure permissions on config file..."
+echo "Step 5: Setting up config files from examples..."
+for example in config_example.json state_example.json mailing_list_example.txt; do
+    real="${example/_example/}"
+    real="${real/_example./\.}"
+    # Derive real filename: config_example.json -> config.json, mailing_list_example.txt -> mailing_list.txt
+    real=$(echo "$example" | sed 's/_example//')
+    if [ ! -f "$real" ]; then
+        cp "$example" "$real"
+        echo "  Created $real from $example"
+    else
+        echo "  $real already exists, skipping"
+    fi
+done
 chmod 600 config.json
+echo "  Reminder: fill in your credentials in config.json and emails in mailing_list.txt"
 
 echo ""
 echo "Step 6: Installing systemd service..."
