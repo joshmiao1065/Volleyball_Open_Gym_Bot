@@ -14,7 +14,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 from typing import List, Dict
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import sync_playwright
 
 # Configuration file paths
 SCRIPT_DIR = Path(__file__).parent
@@ -24,15 +24,16 @@ MAILING_LIST_FILE = SCRIPT_DIR / "mailing_list.txt"
 LOG_FILE = SCRIPT_DIR / "volleyball_bot.log"
 
 # Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler()
-    ]
-)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.propagate = False  # prevent double-logging via root logger
+_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+_file_handler = logging.FileHandler(LOG_FILE)
+_file_handler.setFormatter(_formatter)
+_stream_handler = logging.StreamHandler()
+_stream_handler.setFormatter(_formatter)
+logger.addHandler(_file_handler)
+logger.addHandler(_stream_handler)
 
 
 class VolleyballBot:
@@ -61,8 +62,8 @@ class VolleyballBot:
         """Fail fast if config still contains placeholder values (all-caps strings)"""
         checks = {
             'personal_email': self.config.get('personal_email', ''),
-            'email.from_address': self.config['email'].get('from_address', ''),
-            'email.app_password': self.config['email'].get('app_password', ''),
+            'email.from_address': self.config.get('email', {}).get('from_address', ''),
+            'email.app_password': self.config.get('email', {}).get('app_password', ''),
         }
         errors = [
             f"  - {field}: '{value}'"
@@ -239,78 +240,81 @@ This was an automatically generated email. Please reply-all to this email if you
             logger.info(f"Announcement sent with {len(changes)} change(s)")
         else:
             logger.error("Failed to send announcement")
+
+    def check_slots(self) -> List[Dict]:
         """Check for available Advanced and Advanced Intermediate slots using Playwright"""
         logger.info("Starting slot check...")
         
         try:
             with sync_playwright() as p:
-                # Launch browser in headless mode
                 browser = p.chromium.launch(headless=True)
-                context = browser.new_context(
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                )
-                page = context.new_page()
-                
-                # Navigate to the page
-                logger.info(f"Navigating to {self.config['page_url']}")
-                page.goto(self.config['page_url'], wait_until='networkidle')
-                
-                # Click the Beacon/Fri tab and wait for AJAX response
-                logger.info("Switching to Beacon/Fri tab...")
-                page.evaluate("""
-                    SwitchMenu('2','1','34','https://www.nyurban.com/wp-admin/admin-ajax.php','active')
-                """)
-                
-                # Wait for the AJAX response and table to update
-                page.wait_for_load_state('networkidle')
-                page.wait_for_timeout(2000)  # Additional wait for table to populate
-                
-                # Parse ALL Advanced/Advanced Intermediate rows regardless of availability
-                all_slots = []
+                try:
+                    context = browser.new_context(
+                        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    )
+                    page = context.new_page()
+                    
+                    # Navigate to the page
+                    logger.info(f"Navigating to {self.config['page_url']}")
+                    page.goto(self.config['page_url'], wait_until='networkidle')
+                    
+                    # Click the Beacon/Fri tab and wait for AJAX response
+                    logger.info("Switching to Beacon/Fri tab...")
+                    page.evaluate("""
+                        SwitchMenu('2','1','34','https://www.nyurban.com/wp-admin/admin-ajax.php','active')
+                    """)
+                    
+                    # Wait for the AJAX response and table to update
+                    page.wait_for_load_state('networkidle')
+                    page.wait_for_timeout(2000)  # Additional wait for table to populate
+                    
+                    # Parse ALL Advanced/Advanced Intermediate rows regardless of availability
+                    all_slots = []
 
-                rows = page.query_selector_all('table tbody tr')
-                logger.info(f"Found {len(rows)} rows in table")
+                    rows = page.query_selector_all('table tbody tr')
+                    logger.info(f"Found {len(rows)} rows in table")
 
-                for row in rows:
-                    try:
-                        cells = row.query_selector_all('td')
-                        if len(cells) < 7:
+                    for row in rows:
+                        try:
+                            cells = row.query_selector_all('td')
+                            if len(cells) < 7:
+                                continue
+
+                            # Structure: Select | Date | Gym | Level | Time | Fee | Available
+                            date = cells[1].inner_text().strip()
+                            gym = cells[2].inner_text().strip()
+                            level = cells[3].inner_text().strip()
+                            time = cells[4].inner_text().strip()
+                            fee = cells[5].inner_text().strip()
+                            availability = cells[6].inner_text().strip()
+
+                            if "Advanced Intermediate" not in level and level.strip() != "Advanced":
+                                continue
+
+                            avail_lower = availability.lower()
+                            is_sold_out = "sold out" in avail_lower
+                            is_available = not is_sold_out and (avail_lower == "yes" or "space" in avail_lower)
+
+                            all_slots.append({
+                                'date': date,
+                                'gym': gym,
+                                'level': level,
+                                'time': time,
+                                'fee': fee,
+                                'availability': availability,
+                                'status': 'sold_out' if is_sold_out else ('available' if is_available else 'unknown')
+                            })
+                            logger.info(f"Scraped slot: {date} - {gym} - status: {'sold_out' if is_sold_out else 'available'}")
+
+                        except Exception as e:
+                            logger.warning(f"Error parsing row: {e}")
                             continue
 
-                        # Structure: Select | Date | Gym | Level | Time | Fee | Available
-                        date = cells[1].inner_text().strip()
-                        gym = cells[2].inner_text().strip()
-                        level = cells[3].inner_text().strip()
-                        time = cells[4].inner_text().strip()
-                        fee = cells[5].inner_text().strip()
-                        availability = cells[6].inner_text().strip()
+                    logger.info(f"Scraped {len(all_slots)} Advanced/Advanced Intermediate slots total")
+                    return all_slots
 
-                        if "Advanced Intermediate" not in level and level.strip() != "Advanced":
-                            continue
-
-                        avail_lower = availability.lower()
-                        is_sold_out = "sold out" in avail_lower
-                        is_available = not is_sold_out and (avail_lower == "yes" or "space" in avail_lower)
-
-                        all_slots.append({
-                            'date': date,
-                            'gym': gym,
-                            'level': level,
-                            'time': time,
-                            'fee': fee,
-                            'availability': availability,
-                            'status': 'sold_out' if is_sold_out else ('available' if is_available else 'unknown')
-                        })
-                        logger.info(f"Scraped slot: {date} - {gym} - status: {'sold_out' if is_sold_out else 'available'}")
-
-                    except Exception as e:
-                        logger.warning(f"Error parsing row: {e}")
-                        continue
-
-                browser.close()
-
-                logger.info(f"Scraped {len(all_slots)} Advanced/Advanced Intermediate slots total")
-                return all_slots
+                finally:
+                    browser.close()
                 
         except Exception as e:
             logger.error(f"Error during slot check: {e}")
@@ -340,6 +344,7 @@ This was an automatically generated email. Please reply-all to this email if you
     def run_check_cycle(self):
         """Run a single check cycle"""
         try:
+            self.mailing_list = self.load_mailing_list()  # reload so file changes take effect without restart
             self.purge_past_dates()
             all_slots = self.check_slots()
 
