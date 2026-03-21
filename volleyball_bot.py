@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
 NY Urban Volleyball Open Play Slot Monitor Bot
-Monitors the Beacon/Fri tab for Advanced Intermediate slots and notifies via email
+Monitors the Beacon/Fri tab for Advanced and Advanced Intermediate slots and notifies via email
 """
 
 import json
 import logging
-import os
 import smtplib
 import time
 from datetime import datetime, timedelta
@@ -80,15 +79,28 @@ class VolleyballBot:
         try:
             with open(STATE_FILE, 'r') as f:
                 state = json.load(f)
-            # Migrate old notified_dates list to date_states dict
+
+            # Migration 1: notified_dates list → date_states dict (plain date keys)
             if 'notified_dates' in state and 'date_states' not in state:
-                logger.info("Migrating state from notified_dates to date_states format")
+                logger.info("Migrating state: notified_dates → date_states")
                 state['date_states'] = {
                     date: {"status": "available", "notified": True, "last_notified": None, "times_notified": 1}
                     for date in state.pop('notified_dates')
                 }
                 with open(STATE_FILE, 'w') as f:
                     json.dump(state, f, indent=2)
+
+            # Migration 2: plain date keys → date|level composite keys
+            # Old bot only tracked Advanced Intermediate, so that's the safe assumption
+            if 'date_states' in state:
+                plain_keys = [k for k in state['date_states'] if '|' not in k]
+                if plain_keys:
+                    logger.info(f"Migrating {len(plain_keys)} plain date key(s) to date|level format")
+                    for key in plain_keys:
+                        state['date_states'][f"{key}|Advanced Intermediate"] = state['date_states'].pop(key)
+                    with open(STATE_FILE, 'w') as f:
+                        json.dump(state, f, indent=2)
+
             return state
         except FileNotFoundError:
             return {
@@ -188,7 +200,7 @@ The bot will continue attempting to run every 10 minutes.
         
         # Load custom message template or use default
         body = f"""
-{self.config.get('mailing_list_message', 'Great news! Advanced Intermediate volleyball slots are now available:')}
+{self.config.get('mailing_list_message', 'Great news! Advanced volleyball slots are now available:')}
 
 {chr(10).join(slot_info)}
 
@@ -243,7 +255,7 @@ Please check the page manually: {self.config['page_url']}
         self.send_email([self.config['personal_email']], subject, body)
     
     def check_slots(self) -> List[Dict]:
-        """Check for available Advanced Intermediate slots using Playwright"""
+        """Check for available Advanced and Advanced Intermediate slots using Playwright"""
         logger.info("Starting slot check...")
         
         try:
@@ -269,7 +281,7 @@ Please check the page manually: {self.config['page_url']}
                 page.wait_for_load_state('networkidle')
                 page.wait_for_timeout(2000)  # Additional wait for table to populate
                 
-                # Parse ALL Advanced Intermediate rows regardless of availability
+                # Parse ALL Advanced/Advanced Intermediate rows regardless of availability
                 all_slots = []
 
                 rows = page.query_selector_all('table tbody tr')
@@ -289,7 +301,7 @@ Please check the page manually: {self.config['page_url']}
                         fee = cells[5].inner_text().strip()
                         availability = cells[6].inner_text().strip()
 
-                        if "Advanced Intermediate" not in level:
+                        if "Advanced Intermediate" not in level and level.strip() != "Advanced":
                             continue
 
                         avail_lower = availability.lower()
@@ -313,7 +325,7 @@ Please check the page manually: {self.config['page_url']}
 
                 browser.close()
 
-                logger.info(f"Scraped {len(all_slots)} Advanced Intermediate slots total")
+                logger.info(f"Scraped {len(all_slots)} Advanced/Advanced Intermediate slots total")
                 return all_slots
                 
         except Exception as e:
@@ -354,11 +366,12 @@ Please check the page manually: {self.config['page_url']}
                         
                         for row in rows:
                             cells = row.query_selector_all('td')
-                            if len(cells) < 2:
+                            if len(cells) < 4:
                                 continue
-                            
+
                             row_date = cells[1].inner_text().strip()
-                            if row_date == slot['date']:
+                            row_level = cells[3].inner_text().strip()
+                            if row_date == slot['date'] and row_level == slot['level']:
                                 # Find the radio button in this row
                                 radio = row.query_selector('input[type="radio"]')
                                 if radio:
@@ -424,14 +437,14 @@ Please check the page manually: {self.config['page_url']}
             now = datetime.now().isoformat()
 
             for slot in all_slots:
-                date = slot['date']
-                existing = self.state['date_states'].get(date)
+                date_key = f"{slot['date']}|{slot['level']}"
+                existing = self.state['date_states'].get(date_key)
 
                 if slot['status'] == 'available':
                     if existing is None:
-                        # First time seeing this date — notify
+                        # First time seeing this slot — notify
                         slots_to_notify.append(slot)
-                        self.state['date_states'][date] = {
+                        self.state['date_states'][date_key] = {
                             "status": "available",
                             "notified": True,
                             "last_notified": now,
@@ -439,7 +452,7 @@ Please check the page manually: {self.config['page_url']}
                         }
                     elif existing['status'] == 'sold_out':
                         # Was sold out, now has a cancellation — re-notify
-                        logger.info(f"Slot re-opened after selling out: {date}")
+                        logger.info(f"Slot re-opened after selling out: {slot['date']} ({slot['level']})")
                         slots_to_notify.append(slot)
                         existing['status'] = 'available'
                         existing['notified'] = True
@@ -449,26 +462,23 @@ Please check the page manually: {self.config['page_url']}
 
                 elif slot['status'] == 'sold_out':
                     if existing is None:
-                        # First time seeing this date but it's already sold out — just record it
-                        self.state['date_states'][date] = {
+                        # First time seeing this slot but already sold out — record it
+                        self.state['date_states'][date_key] = {
                             "status": "sold_out",
                             "notified": False,
                             "last_notified": None,
                             "times_notified": 0
                         }
                     elif existing['status'] == 'available':
-                        # Was open, now sold out — update status silently
-                        logger.info(f"Slot sold out: {date}")
+                        # Was open, now sold out — update silently
+                        logger.info(f"Slot sold out: {slot['date']} ({slot['level']})")
                         existing['status'] = 'sold_out'
 
             if slots_to_notify:
                 logger.info(f"Notifying about {len(slots_to_notify)} slot(s)")
                 self.send_mailing_list_notification(slots_to_notify)
-
-                available_for_checkout = [s for s in slots_to_notify if s['status'] == 'available']
-                if available_for_checkout:
-                    checkout_url = self.select_slots_and_checkout(available_for_checkout)
-                    self.send_personal_notification(checkout_url, checkout_url is not None, available_for_checkout)
+                checkout_url = self.select_slots_and_checkout(slots_to_notify)
+                self.send_personal_notification(checkout_url, checkout_url is not None, slots_to_notify)
             else:
                 logger.info("No new or re-opened slots found")
 
@@ -483,7 +493,7 @@ Please check the page manually: {self.config['page_url']}
     def run(self):
         """Main run loop - checks every 10 minutes"""
         logger.info("Volleyball bot started!")
-        logger.info(f"Monitoring Beacon/Fri tab for Advanced Intermediate slots")
+        logger.info(f"Monitoring Beacon/Fri tab for Advanced and Advanced Intermediate slots")
         logger.info(f"Check interval: {self.config['check_interval_minutes']} minutes")
         logger.info(f"Mailing list size: {len(self.mailing_list)} recipients")
         
