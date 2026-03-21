@@ -10,8 +10,8 @@ You can easily configure `config.json` for a different page URL or check interva
 - Filters for **Advanced** and **Advanced Intermediate** levels
 - Notifies mailing list when slots open **or reopen after selling out**
 - Tracks per-slot status (`available` / `sold_out`) to prevent spam and catch cancellations
-- Mailing list always BCC'd — recipients cannot see each other's addresses
-- Startup validation — fails immediately if `config.json` still has placeholder values
+- Mailing list always BCC'd so recipients cannot see each other's addresses
+- Startup validation: fails immediately if `config.json` still has placeholder values
 - Manual announcement emails via `--announce` flag
 - Error notifications with 24-hour throttling
 - Auto-restart on failure via systemd
@@ -23,7 +23,7 @@ You can easily configure `config.json` for a different page URL or check interva
 volleyball_bot/
 ├── volleyball_bot.py          # Main bot script
 ├── config.json                # Your configuration (gitignored)
-├── config_example.json        # Template — fill in and rename
+├── config_example.json        # Template: fill in and rename
 ├── state.json                 # Persistent slot state (gitignored)
 ├── state_example.json         # Template for fresh installs
 ├── mailing_list.txt           # Email recipients (gitignored)
@@ -55,7 +55,7 @@ sudo playwright install-deps chromium
 
 ### Step 2: Run the install script
 
-The install script handles the rest — it copies example files, sets permissions, and registers the systemd service:
+The install script handles the rest. It copies example files, sets permissions, and registers the systemd service:
 
 ```bash
 bash install.sh
@@ -72,7 +72,7 @@ The script will:
 nano ~/volleyball_bot/config.json
 ```
 
-All fields must be filled — the bot will refuse to start if any placeholder values (ALL_CAPS) remain. See [Configuration Options](#configuration-options) below.
+All fields must be filled such that the bot will refuse to start if any placeholder values (ALL_CAPS) remain. See [Configuration Options](#configuration-options) below.
 
 ```bash
 nano ~/volleyball_bot/mailing_list.txt
@@ -103,8 +103,8 @@ tail -f ~/volleyball_bot/volleyball_bot.log
 | Situation | Action |
 |-----------|--------|
 | New slot, available | Notify mailing list |
-| Known slot, was `sold_out`, now available | Re-notify — someone cancelled |
-| Known slot, still `available` | No action — no spam |
+| Known slot, was `sold_out`, now available | notify if open slot because someone cancelled |
+| Known slot, still `available` | No action so no spam |
 | Any slot now `sold_out` | Update state silently, watch for cancellations |
 
 **State is tracked per `date + level`** so Advanced and Advanced Intermediate sessions on the same date are handled independently.
@@ -179,7 +179,7 @@ sudo systemctl start volleyball_bot.service
 
 ### mailing_list.txt
 - One email address per line
-- Changes take effect on the next check cycle — no restart needed
+- Changes take effect on the next check cycle. Thus, no restart needed
 
 ---
 
@@ -187,21 +187,21 @@ sudo systemctl start volleyball_bot.service
 
 ### 1. Slot Notification
 - **Trigger**: New or reopened slots found
-- **To**: `joshuamiao03@gmail.com`
+- **To**: `<personal email>`
 - **BCC**: Everyone in `mailing_list.txt`
 - **Subject**: `Volleyball Slots Available - [X] found!`
 - **Contains**: Date, gym, level, registration link
 
 ### 2. Announcement
 - **Trigger**: Manually sent via `--announce` flag
-- **To**: `joshuamiao03@gmail.com`
+- **To**: `<personal email>`
 - **BCC**: Everyone in `mailing_list.txt`
 - **Subject**: `joshbot update DD/MM/YYYY`
 - **Contains**: Bullet-pointed list of changes
 
 ### 3. Error Notification
 - **Trigger**: Unhandled exception during a check cycle
-- **To**: `joshuamiao03@gmail.com` only
+- **To**: `<personal email>` only
 - **Subject**: `Volleyball Bot Error Alert`
 - **Throttle**: Max once per 24 hours
 
@@ -328,19 +328,18 @@ The file is gitignored and will never be committed. Only `config_example.json` (
 ## Changelog
 
 ### v2.1.0
-- Mailing list now always BCC'd — recipients cannot see each other's addresses
-- `joshuamiao03@gmail.com` is the explicit direct recipient on all emails
+- Mailing list now always BCC'd. Recipients cannot see each other's addresses
 - Added `--announce` flag for sending update emails to the mailing list
 - Removed automated checkout and personal checkout notifications
 
 ### v2.0.0
-- Added **cancellation detection** — bot re-notifies when a sold-out slot reopens
+- Added **cancellation detection** so bot re-notifies when a sold-out slot reopens
 - Replaced `notified_dates` list with `date_states` dict for full per-slot status tracking (`available` / `sold_out`)
 - Extended monitoring to include **Advanced** level in addition to Advanced Intermediate
 - State key is now `date|level` composite to handle multiple levels on the same date
-- Automatic state migration from v1.0 format — no manual changes needed
+- Automatic state migration from v1.0 format: no manual changes needed
 - `install.sh` now auto-copies example files on fresh installs
-- Startup config validation — bot fails fast with a clear error if placeholders aren't filled
+- Startup config validation. Bot fails fast with a clear error if placeholders aren't filled
 - Automatic purge of past session dates from `state.json` on each cycle
 - Removed unused `import os`
 
