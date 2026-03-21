@@ -220,16 +220,29 @@ Happy volleyballing!
     
     def send_announcement(self, changes: List[str]):
         """Send an announcement email to the mailing list with a list of changes"""
-        today = datetime.now().strftime('%d/%m/%Y')
+        today = datetime.now().strftime('%m/%d/%Y')
         subject = f"joshbot update {today}"
-
         bullet_points = '\n'.join(f"* {change}" for change in changes)
+        body = f"""Greetings NYUrban Volleyballers,
 
-        body = f"""joshbot is excited to announce the following changes:
+joshbot is excited to announce the following changes:
 {bullet_points}
 
-This was an automatically generated email. Please reply-all to this email if you notice any bugs or want to suggest any features/changes to joshbot or if you wish to update your email preferences (autonomous unsubscribe coming soon).
+This was an automatically generated email. Please reply-all to this email if you notice any bugs or want to suggest any features/changes to joshbot or if you wish to update your email preferences (idk how to implement an unsubscribe feature lol).
 """
+        print("\n--- ANNOUNCEMENT PREVIEW ---")
+        print(f"To:      {self.config['personal_email']}")
+        print(f"BCC:     {len(self.mailing_list)} recipient(s)")
+        print(f"Subject: {subject}")
+        print(f"\n{body}")
+        print("----------------------------")
+
+        confirm = input("Send this announcement? (yes/no): ").strip().lower()
+        if confirm != 'yes':
+            print("Announcement cancelled.")
+            logger.info("Announcement cancelled by user")
+            return
+
         success = self.send_email(
             to_emails=[self.config['personal_email']],
             subject=subject,
@@ -237,8 +250,10 @@ This was an automatically generated email. Please reply-all to this email if you
             bcc_emails=self.mailing_list
         )
         if success:
+            print("Announcement sent successfully.")
             logger.info(f"Announcement sent with {len(changes)} change(s)")
         else:
+            print("Failed to send announcement. Check the log for details.")
             logger.error("Failed to send announcement")
 
     def check_slots(self) -> List[Dict]:
