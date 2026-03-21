@@ -428,9 +428,30 @@ Please check the page manually: {self.config['page_url']}
             logger.error(f"Error during checkout process: {e}")
             return None
     
+    def purge_past_dates(self):
+        """Remove state entries whose session date has already passed"""
+        today = datetime.now().date()
+        to_remove = []
+
+        for key in self.state['date_states']:
+            try:
+                # Key format: "Friday 07/11/2025|Advanced Intermediate"
+                date_str = key.split('|')[0].split(' ', 1)[1]  # "07/11/2025"
+                session_date = datetime.strptime(date_str, '%m/%d/%Y').date()
+                if session_date < today:
+                    to_remove.append(key)
+            except (IndexError, ValueError):
+                logger.warning(f"Could not parse date from state key: '{key}', skipping")
+
+        if to_remove:
+            for key in to_remove:
+                del self.state['date_states'][key]
+            logger.info(f"Purged {len(to_remove)} past date(s) from state")
+
     def run_check_cycle(self):
         """Run a single check cycle"""
         try:
+            self.purge_past_dates()
             all_slots = self.check_slots()
 
             slots_to_notify = []

@@ -93,9 +93,10 @@ tail -f ~/volleyball_bot/volleyball_bot.log
 ## How It Works
 
 **Every 10 minutes**, the bot:
-1. Navigates to the NY Urban open play page
-2. Switches to the Beacon/Fri tab and waits for the AJAX table to load
-3. Scrapes **all** Advanced and Advanced Intermediate rows, regardless of availability
+1. Purges past session dates from `state.json`
+2. Navigates to the NY Urban open play page
+3. Switches to the Beacon/Fri tab and waits for the AJAX table to load
+4. Scrapes **all** Advanced and Advanced Intermediate rows, regardless of availability
 
 **For each slot found**, it checks the slot's current status against `state.json`:
 
@@ -122,7 +123,7 @@ tail -f ~/volleyball_bot/volleyball_bot.log
 
 ## State Schema
 
-`state.json` tracks every slot the bot has ever seen:
+`state.json` tracks every slot the bot has seen that hasn't passed yet. Past dates are automatically purged at the start of each check cycle.
 
 ```json
 {
@@ -327,7 +328,7 @@ The file is gitignored and will never be committed. Only `config_example.json` (
 - Automatic state migration from v1.0 format — no manual changes needed
 - `install.sh` now auto-copies example files on fresh installs
 - Startup config validation — bot fails fast with a clear error if placeholders aren't filled
-- Fixed checkout row matching to check both date and level
+- Automatic purge of past session dates from `state.json` on each cycle
 - Removed unused `import os`
 
 ### v1.0.0
