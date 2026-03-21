@@ -128,21 +128,27 @@ tail -f ~/volleyball_bot/volleyball_bot.log
 ```json
 {
   "date_states": {
-    "Friday 07/11/2025|Advanced Intermediate": {
-      "status": "sold_out",
-      "notified": true,
-      "last_notified": "2025-07-08T10:32:00",
-      "times_notified": 1
-    },
-    "Friday 07/18/2025|Advanced": {
+    "Fri 07/18|Advanced": {
       "status": "available",
       "notified": true,
-      "last_notified": "2025-07-10T08:15:00",
+      "last_notified": "2026-07-10T08:15:00",
+      "times_notified": 1
+    },
+    "Fri 07/18|Advanced Intermediate": {
+      "status": "sold_out",
+      "notified": true,
+      "last_notified": "2026-07-09T14:22:00",
+      "times_notified": 1
+    },
+    "Fri 07/25|Advanced Intermediate": {
+      "status": "available",
+      "notified": true,
+      "last_notified": "2026-07-11T09:00:00",
       "times_notified": 2
     }
   },
   "last_error_notification": null,
-  "last_successful_check": "2025-07-10T08:15:00"
+  "last_successful_check": "2026-07-11T09:00:00"
 }
 ```
 

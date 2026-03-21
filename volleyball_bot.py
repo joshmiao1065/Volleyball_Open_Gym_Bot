@@ -435,9 +435,10 @@ Please check the page manually: {self.config['page_url']}
 
         for key in self.state['date_states']:
             try:
-                # Key format: "Friday 07/11/2025|Advanced Intermediate"
-                date_str = key.split('|')[0].split(' ', 1)[1]  # "07/11/2025"
-                session_date = datetime.strptime(date_str, '%m/%d/%Y').date()
+                # Key format: "Fri 03/06|Advanced Intermediate"
+                date_str = key.split('|')[0].split(' ', 1)[1]  # "03/06"
+                # No year in the scraped date — assume current year
+                session_date = datetime.strptime(f"{date_str}/{today.year}", '%m/%d/%Y').date()
                 if session_date < today:
                     to_remove.append(key)
             except (IndexError, ValueError):
