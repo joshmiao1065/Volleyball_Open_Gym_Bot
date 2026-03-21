@@ -3,13 +3,8 @@
   "check_interval_minutes": 10,
   "personal_email": "PERSONALEMAIL@EXAMPLE.COM",
   "email": {
-    "from_address": "jSENDER EMAIL ADDRESS",
-    "app_password": "GOOGLE APP PASSWORD FOR A SENDER EMAIL ADDRESS"
-  },
-  "checkout": {
-    "first_name": "FIRSTNAME",
-    "last_name": "LASTNAME",
-    "email": "EMAIL@EXAMPLE.COM"
+    "from_address": "SENDER@EXAMPLE.COM",
+    "app_password": "GOOGLE APP PASSWORD FOR SENDER EMAIL"
   },
   "mailing_list_message": "Hey guys! It's JoshBot. Great news! NY Urban Beacon slots just dropped. Check it out:"
 }

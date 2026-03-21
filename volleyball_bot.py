@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 # Configuration file paths
@@ -62,9 +62,6 @@ class VolleyballBot:
             'personal_email': self.config.get('personal_email', ''),
             'email.from_address': self.config['email'].get('from_address', ''),
             'email.app_password': self.config['email'].get('app_password', ''),
-            'checkout.email': self.config['checkout'].get('email', ''),
-            'checkout.first_name': self.config['checkout'].get('first_name', ''),
-            'checkout.last_name': self.config['checkout'].get('last_name', ''),
         }
         errors = [
             f"  - {field}: '{value}'"
@@ -211,49 +208,6 @@ Happy volleyballing!
         
         self.send_email(self.mailing_list, subject, body)
     
-    def send_personal_notification(self, checkout_url: Optional[str], success: bool, slots: List[Dict]):
-        """Send personal notification with checkout link"""
-        subject = "Volleyball Bot - Checkout Ready!" if success else "🏐 Volleyball Bot - Slots Found (Checkout Failed)"
-        
-        slot_info = []
-        for slot in slots:
-            slot_info.append(f"• {slot['date']} at {slot['gym']} ({slot['level']})")
-        
-        if success and checkout_url:
-            body = f"""
-Hi Josh,
-
-Successfully found and selected volleyball slots!
-
-Selected Slots:
-{chr(10).join(slot_info)}
-
-Checkout Status: Successfully reached checkout page
-
-Checkout Link: {checkout_url}
-
-Please complete payment at your earliest convenience.
-
-- Your Volleyball Bot
-            """
-        else:
-            body = f"""
-Hi Josh,
-
-Found available volleyball slots but encountered an issue during checkout.
-
-Available Slots:
-{chr(10).join(slot_info)}
-
-Checkout Status: Failed to complete checkout process
-
-Please check the page manually: {self.config['page_url']}
-
-- Your Volleyball Bot
-            """
-        
-        self.send_email([self.config['personal_email']], subject, body)
-    
     def check_slots(self) -> List[Dict]:
         """Check for available Advanced and Advanced Intermediate slots using Playwright"""
         logger.info("Starting slot check...")
@@ -332,102 +286,6 @@ Please check the page manually: {self.config['page_url']}
             logger.error(f"Error during slot check: {e}")
             raise
     
-    def select_slots_and_checkout(self, slots: List[Dict]) -> Optional[str]:
-        """Select up to 4 available slots and attempt checkout"""
-        logger.info(f"Attempting to select {min(len(slots), 4)} slots and checkout...")
-        
-        try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                context = browser.new_context(
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                )
-                page = context.new_page()
-                
-                # Navigate to the page
-                page.goto(self.config['page_url'], wait_until='networkidle')
-                
-                # Switch to Beacon/Fri tab
-                page.evaluate("""
-                    SwitchMenu('2','1','34','https://www.nyurban.com/wp-admin/admin-ajax.php','active')
-                """)
-                page.wait_for_load_state('networkidle')
-                page.wait_for_timeout(2000)
-                
-                # Select up to 4 slots
-                slots_to_select = slots[:4]
-                selected_count = 0
-                
-                for i, slot in enumerate(slots_to_select):
-                    try:
-                        # The radio button ID increments - we need to find the correct row
-                        # We'll use the date to match the row
-                        rows = page.query_selector_all('table tbody tr')
-                        
-                        for row in rows:
-                            cells = row.query_selector_all('td')
-                            if len(cells) < 4:
-                                continue
-
-                            row_date = cells[1].inner_text().strip()
-                            row_level = cells[3].inner_text().strip()
-                            if row_date == slot['date'] and row_level == slot['level']:
-                                # Find the radio button in this row
-                                radio = row.query_selector('input[type="radio"]')
-                                if radio:
-                                    radio.click()
-                                    selected_count += 1
-                                    logger.info(f"Selected slot: {slot['date']}")
-                                break
-                    except Exception as e:
-                        logger.warning(f"Failed to select slot {slot['date']}: {e}")
-                
-                if selected_count == 0:
-                    logger.error("Failed to select any slots")
-                    browser.close()
-                    return None
-                
-                logger.info(f"Successfully selected {selected_count} slots")
-                
-                # Fill out the checkout form
-                page.fill('input[name="f_first_name"]', self.config['checkout']['first_name'])
-                page.fill('input[name="f_last_name"]', self.config['checkout']['last_name'])
-                page.fill('input[name="f_email"]', self.config['checkout']['email'])
-                page.fill('input[name="f_cemail"]', self.config['checkout']['email'])
-                
-                # Check the waiver checkbox
-                waiver_checkbox = page.query_selector('label[for="check-4"]')
-                if waiver_checkbox:
-                    waiver_checkbox.click()
-                else:
-                    # Try alternative selector
-                    page.check('input#check-4')
-                
-                logger.info("Filled out checkout form")
-                
-                # Click checkout button and wait for navigation
-                page.click('input[type="submit"].btn_green')
-                
-                # Wait for navigation to payment page
-                page.wait_for_load_state('networkidle', timeout=10000)
-                
-                # Get the checkout URL
-                checkout_url = page.url
-                
-                browser.close()
-                
-                # Check if we reached the authorize.net payment page
-                if 'authorize.net' in checkout_url:
-                    logger.info(f"Successfully reached checkout page: {checkout_url}")
-                    return checkout_url
-                else:
-                    logger.warning(f"Unexpected URL after checkout: {checkout_url}")
-                    return checkout_url
-                    
-        except Exception as e:
-            logger.error(f"Error during checkout process: {e}")
-            return None
-    
     def purge_past_dates(self):
         """Remove state entries whose session date has already passed"""
         today = datetime.now().date()
@@ -499,8 +357,6 @@ Please check the page manually: {self.config['page_url']}
             if slots_to_notify:
                 logger.info(f"Notifying about {len(slots_to_notify)} slot(s)")
                 self.send_mailing_list_notification(slots_to_notify)
-                checkout_url = self.select_slots_and_checkout(slots_to_notify)
-                self.send_personal_notification(checkout_url, checkout_url is not None, slots_to_notify)
             else:
                 logger.info("No new or re-opened slots found")
 

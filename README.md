@@ -11,8 +11,6 @@ You can easily configure `config.json` for a different page URL or check interva
 - Notifies mailing list when slots open **or reopen after selling out**
 - Tracks per-slot status (`available` / `sold_out`) to prevent spam and catch cancellations
 - Startup validation — fails immediately if `config.json` still has placeholder values
-- Automatically attempts to fill checkout form and captures payment URL
-- Sends personal notification with checkout link
 - Error notifications with 24-hour throttling
 - Auto-restart on failure via systemd
 - Lightweight, runs on a Pi-hole
@@ -102,7 +100,7 @@ tail -f ~/volleyball_bot/volleyball_bot.log
 
 | Situation | Action |
 |-----------|--------|
-| New slot, available | Notify mailing list, attempt checkout |
+| New slot, available | Notify mailing list |
 | Known slot, was `sold_out`, now available | Re-notify — someone cancelled |
 | Known slot, still `available` | No action — no spam |
 | Any slot now `sold_out` | Update state silently, watch for cancellations |
@@ -110,9 +108,7 @@ tail -f ~/volleyball_bot/volleyball_bot.log
 **State is tracked per `date + level`** so Advanced and Advanced Intermediate sessions on the same date are handled independently.
 
 **On notification**:
-- Sends email to entire mailing list with slot details
-- Attempts to select up to 4 slots and fill the checkout form
-- Captures the payment URL and sends it to your personal email
+- Sends email to entire mailing list with slot details and registration link
 
 **Error handling**:
 - Logs all errors to `volleyball_bot.log`
@@ -174,12 +170,9 @@ sudo systemctl start volleyball_bot.service
 |-------|-------------|
 | `page_url` | NY Urban registration page URL |
 | `check_interval_minutes` | How often to check (default: `10`) |
-| `personal_email` | Your email for personal/checkout notifications |
+| `personal_email` | Your email for error notifications |
 | `email.from_address` | Gmail address the bot sends from |
 | `email.app_password` | [Gmail App Password](https://myaccount.google.com/apppasswords) for the sender account |
-| `checkout.first_name` | Your first name for the checkout form |
-| `checkout.last_name` | Your last name |
-| `checkout.email` | Your email for the checkout form |
 | `mailing_list_message` | Custom intro line in group notification emails |
 
 ### mailing_list.txt
@@ -196,19 +189,7 @@ sudo systemctl start volleyball_bot.service
 - **Subject**: `Volleyball Slots Available - [X] found!`
 - **Contains**: Date, gym, level, registration link
 
-### 2. Personal Success Notification
-- **Trigger**: Bot successfully reached the checkout page
-- **To**: Personal email only
-- **Subject**: `Volleyball Bot - Checkout Ready!`
-- **Contains**: Selected slots, checkout link
-
-### 3. Personal Failure Notification
-- **Trigger**: Slots found but checkout process failed
-- **To**: Personal email only
-- **Subject**: `Volleyball Bot - Slots Found (Checkout Failed)`
-- **Contains**: Available slots, page link to register manually
-
-### 4. Error Notification
+### 2. Error Notification
 - **Trigger**: Unhandled exception during a check cycle
 - **To**: Personal email only
 - **Subject**: `Volleyball Bot Error Alert`
