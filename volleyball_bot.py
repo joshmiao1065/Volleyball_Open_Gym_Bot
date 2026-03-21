@@ -4,6 +4,7 @@ NY Urban Volleyball Open Play Slot Monitor Bot
 Monitors the Beacon/Fri tab for Advanced and Advanced Intermediate slots and notifies via email
 """
 
+import argparse
 import json
 import logging
 import smtplib
@@ -125,30 +126,33 @@ class VolleyballBot:
             logger.error(f"Mailing list file not found: {MAILING_LIST_FILE}")
             return []
     
-    def send_email(self, to_emails: List[str], subject: str, body: str, is_html: bool = False):
-        """Send email via Gmail SMTP"""
+    def send_email(self, to_emails: List[str], subject: str, body: str, bcc_emails: List[str] = None):
+        """Send email via Gmail SMTP. bcc_emails recipients are hidden from all other recipients."""
         try:
             msg = MIMEMultipart('alternative')
             msg['From'] = self.config['email']['from_address']
             msg['To'] = ', '.join(to_emails)
             msg['Subject'] = subject
-            
-            if is_html:
-                msg.attach(MIMEText(body, 'html'))
-            else:
-                msg.attach(MIMEText(body, 'plain'))
-            
-            # Connect to Gmail SMTP
+            msg.attach(MIMEText(body, 'plain'))
+
+            # Pass BCC addresses to the SMTP envelope but not the message headers
+            # so BCC recipients are invisible to each other and to To recipients
+            all_recipients = to_emails + (bcc_emails or [])
+
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
                 server.login(
                     self.config['email']['from_address'],
                     self.config['email']['app_password']
                 )
-                server.send_message(msg)
-            
-            logger.info(f"Email sent successfully to {len(to_emails)} recipient(s)")
+                server.sendmail(
+                    self.config['email']['from_address'],
+                    all_recipients,
+                    msg.as_string()
+                )
+
+            logger.info(f"Email sent to {len(to_emails)} recipient(s), {len(bcc_emails or [])} BCC'd")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to send email: {e}")
             return False
@@ -206,9 +210,35 @@ View and register here: {self.config['page_url']}
 Happy volleyballing!
         """
         
-        self.send_email(self.mailing_list, subject, body)
+        self.send_email(
+            to_emails=[self.config['personal_email']],
+            subject=subject,
+            body=body,
+            bcc_emails=self.mailing_list
+        )
     
-    def check_slots(self) -> List[Dict]:
+    def send_announcement(self, changes: List[str]):
+        """Send an announcement email to the mailing list with a list of changes"""
+        today = datetime.now().strftime('%d/%m/%Y')
+        subject = f"joshbot update {today}"
+
+        bullet_points = '\n'.join(f"* {change}" for change in changes)
+
+        body = f"""joshbot is excited to announce the following changes:
+{bullet_points}
+
+This was an automatically generated email. Please reply-all to this email if you notice any bugs or want to suggest any features/changes to joshbot or if you wish to update your email preferences (autonomous unsubscribe coming soon).
+"""
+        success = self.send_email(
+            to_emails=[self.config['personal_email']],
+            subject=subject,
+            body=body,
+            bcc_emails=self.mailing_list
+        )
+        if success:
+            logger.info(f"Announcement sent with {len(changes)} change(s)")
+        else:
+            logger.error("Failed to send announcement")
         """Check for available Advanced and Advanced Intermediate slots using Playwright"""
         logger.info("Starting slot check...")
         
@@ -389,9 +419,21 @@ Happy volleyballing!
 
 def main():
     """Main entry point"""
+    parser = argparse.ArgumentParser(description='NY Urban Volleyball Slot Monitor Bot')
+    parser.add_argument(
+        '--announce',
+        nargs='+',
+        metavar='CHANGE',
+        help='Send an announcement email to the mailing list. Each argument is a bullet point.'
+    )
+    args = parser.parse_args()
+
     try:
         bot = VolleyballBot()
-        bot.run()
+        if args.announce:
+            bot.send_announcement(args.announce)
+        else:
+            bot.run()
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
     except Exception as e:

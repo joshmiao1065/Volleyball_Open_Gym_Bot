@@ -10,7 +10,9 @@ You can easily configure `config.json` for a different page URL or check interva
 - Filters for **Advanced** and **Advanced Intermediate** levels
 - Notifies mailing list when slots open **or reopen after selling out**
 - Tracks per-slot status (`available` / `sold_out`) to prevent spam and catch cancellations
+- Mailing list always BCC'd — recipients cannot see each other's addresses
 - Startup validation — fails immediately if `config.json` still has placeholder values
+- Manual announcement emails via `--announce` flag
 - Error notifications with 24-hour throttling
 - Auto-restart on failure via systemd
 - Lightweight, runs on a Pi-hole
@@ -183,17 +185,27 @@ sudo systemctl start volleyball_bot.service
 
 ## Email Types
 
-### 1. Mailing List Notification
+### 1. Slot Notification
 - **Trigger**: New or reopened slots found
-- **To**: Everyone in `mailing_list.txt`
+- **To**: `joshuamiao03@gmail.com`
+- **BCC**: Everyone in `mailing_list.txt`
 - **Subject**: `Volleyball Slots Available - [X] found!`
 - **Contains**: Date, gym, level, registration link
 
-### 2. Error Notification
+### 2. Announcement
+- **Trigger**: Manually sent via `--announce` flag
+- **To**: `joshuamiao03@gmail.com`
+- **BCC**: Everyone in `mailing_list.txt`
+- **Subject**: `joshbot update DD/MM/YYYY`
+- **Contains**: Bullet-pointed list of changes
+
+### 3. Error Notification
 - **Trigger**: Unhandled exception during a check cycle
-- **To**: Personal email only
+- **To**: `joshuamiao03@gmail.com` only
 - **Subject**: `Volleyball Bot Error Alert`
 - **Throttle**: Max once per 24 hours
+
+> All emails use BCC for the mailing list so recipients cannot see each other's addresses.
 
 ---
 
@@ -235,6 +247,14 @@ python3 test_bot.py
 # Test email sending directly
 python3 -c "from volleyball_bot import VolleyballBot; bot = VolleyballBot(); bot.send_email(['your@email.com'], 'Test', 'Testing')"
 ```
+
+### Sending Announcements
+
+```bash
+python3 volleyball_bot.py --announce "Fixed cancellation detection" "Added Advanced level monitoring"
+```
+
+Each argument after `--announce` becomes a bullet point in the email. The subject is automatically set to `joshbot update DD/MM/YYYY` using today's date. The mailing list is BCC'd.
 
 ### Maintenance
 
@@ -306,6 +326,12 @@ The file is gitignored and will never be committed. Only `config_example.json` (
 ---
 
 ## Changelog
+
+### v2.1.0
+- Mailing list now always BCC'd — recipients cannot see each other's addresses
+- `joshuamiao03@gmail.com` is the explicit direct recipient on all emails
+- Added `--announce` flag for sending update emails to the mailing list
+- Removed automated checkout and personal checkout notifications
 
 ### v2.0.0
 - Added **cancellation detection** — bot re-notifies when a sold-out slot reopens
