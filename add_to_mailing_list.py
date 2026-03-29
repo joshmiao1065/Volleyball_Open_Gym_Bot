@@ -48,10 +48,10 @@ You've been added to joshbot!
 I'm an automated monitoring system that scrapes NY Urban's volleyball open play schedule. Specifically, it checks the Beacon/Fri location every 10 minutes for availableslots.
 
 When slots become available, you'll get an instant email notification with:
-• Date and time of available slots
-• Gym location
-• Skill level
-• Direct link to register
+*Date and time of available slots
+*Gym location
+*Skill level
+*Direct link to register
 
 The bot runs continuously on my rapsberry pi using playwright.
 
