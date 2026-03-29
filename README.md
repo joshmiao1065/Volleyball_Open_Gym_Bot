@@ -9,6 +9,7 @@ You can easily configure `config.json` for a different page URL or check interva
 - Monitors Beacon/Fri tab on a configurable interval (default: 10 minutes)
 - Filters for **Advanced** and **Advanced Intermediate** levels
 - Notifies mailing list when slots open **or reopen after selling out**
+- Script to add people with professional welcome emails
 - Tracks per-slot status (`available` / `sold_out`) to prevent spam and catch cancellations
 - Mailing list always BCC'd so recipients cannot see each other's addresses
 - Startup validation: fails immediately if `config.json` still has placeholder values
@@ -21,18 +22,18 @@ You can easily configure `config.json` for a different page URL or check interva
 
 ```
 volleyball_bot/
-├── volleyball_bot.py          # Main bot script
-├── config.json                # Your configuration (gitignored)
-├── config_example.json        # Template: fill in and rename
-├── state.json                 # Persistent slot state (gitignored)
-├── state_example.json         # Template for fresh installs
-├── mailing_list.txt           # Email recipients (gitignored)
-├── mailing_list_example.txt   # Template
-├── test_bot.py                # Single-cycle test runner
-├── requirements.txt           # Python dependencies
-├── volleyball_bot.service     # Systemd service file
-├── volleyball_bot.log         # Log file (created automatically)
-└── README.md                  # This file
+├── volleyball_bot.py         # Main bot script
+├── add_to_mailing_list.py    # Interactive tool to add people
+├── config.json               # Configuration settings
+├── state.json                # Persistent state (notified dates)
+├── mailing_list.txt          # Email addresses (one per line)
+├── requirements.txt          # Python dependencies
+├── volleyball_bot.service    # Systemd service file
+├── test_bot.py              # Test script
+├── volleyball_bot.log        # Log file (created automatically)
+├── README.md                # This file
+├── QUICK_REFERENCE.md       # Command cheat sheet
+└── ADDING_PEOPLE_GUIDE.md   # Guide for adding people
 ```
 
 ## Installation on Raspberry Pi
@@ -246,6 +247,34 @@ python3 test_bot.py
 
 # Test email sending directly
 python3 -c "from volleyball_bot import VolleyballBot; bot = VolleyballBot(); bot.send_email(['your@email.com'], 'Test', 'Testing')"
+```
+
+### Adding Users
+
+Use the interactive script to professionally onboard new subscribers:
+```bash
+cd ~/volleyball_bot
+python3 add_to_mailing_list.py
+```
+
+This will:
+- Show current mailing list
+- Validate new email address
+- Preview welcome email before sending
+- Send professional welcome email explaining JoshBot
+- CC you on the welcome email (for your records)
+- Add them to mailing_list.txt
+
+The welcome email explains what JoshBot is, what they'll receive, and how to unsubscribe.
+
+See `ADDING_PEOPLE_GUIDE.md` for detailed instructions.
+
+**Option 2: Manual Edit (No Welcome Email)
+```bash
+nano ~/volleyball_bot/mailing_list.txt
+```
+
+Add or remove email addresses (one per line). Changes take effect on the next check cycle (no restart needed).
 ```
 
 ### Sending Announcements
