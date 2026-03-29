@@ -181,7 +181,7 @@ def main():
         print(f"Welcome email sent to {new_email}")
         print(f"CC sent to {config['personal_email']}")
         print()
-        print("🎉 Done! They're now on the mailing list and have been notified.")
+        print("Done! They're now on the mailing list and have been notified.")
         
     except Exception as e:
         print(f"Error: {e}")
